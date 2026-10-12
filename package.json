@@ -1,0 +1,13 @@
+{
+  "name": "reconx-admin-portal",
+  "version": "1.0.0",
+  "description": "ReconX Practice OS - Mobile Founder Admin Portal",
+  "type": "module",
+  "scripts": {
+    "start": "npx vercel dev"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.x"
+  }
+}

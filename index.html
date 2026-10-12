@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ReconX OS — Founder & Admin License Console</title>
+  <meta name="description" content="Mobile Founder Portal for minting ReconX practice licenses and pairing codes.">
+  <meta name="theme-color" content="#030E12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Ambient Glowing Background -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <!-- AUTHENTICATION SCREEN (PIN LOCK) -->
+  <div id="authScreen" class="screen-view active">
+    <div class="auth-card">
+      <div class="brand-badge">
+        <span class="brand-icon">⚡</span>
+        <span class="brand-text">ReconX Practice OS</span>
+      </div>
+      <h1 class="auth-title">Founder Admin Console</h1>
+      <p class="auth-subtitle">Private mobile portal for direct payments, offline license minting, and pairing code allocation.</p>
+
+      <form id="authForm" class="auth-form">
+        <div class="input-group">
+          <label>Founder Passkey / Master PIN</label>
+          <input 
+            type="password" 
+            id="adminKeyInput" 
+            placeholder="Enter passkey (e.g. RECONX-AYUSH-2026)"
+            required
+            autocomplete="current-password"
+          >
+        </div>
+        <button type="submit" class="btn-primary">Unlock Console</button>
+        <p id="authError" class="error-text hidden"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN ADMIN APP VIEW -->
+  <div id="appScreen" class="screen-view hidden">
+    <!-- Mobile Top Navigation Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="status-indicator"></div>
+        <div>
+          <h2 class="header-title">ReconX Mint Console</h2>
+          <span class="header-sub">Direct UPI &amp; License Issuer</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="logoutBtn" class="btn-text">Lock</button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="tab-btn active" data-tab="mintTab">⚡ Issue New License</button>
+      <button class="tab-btn" data-tab="recordsTab">📋 Active Firms (<span id="recordCount">0</span>)</button>
+    </div>
+
+    <!-- TAB 1: MINT LICENSE -->
+    <main id="mintTab" class="tab-content active">
+      <form id="mintForm" class="mint-form">
+        
+        <!-- SECTION: PRACTICE DETAILS -->
+        <div class="form-section">
+          <h3 class="section-title">1. CA Practice Information</h3>
+          
+          <div class="input-group">
+            <label>CA Firm Name *</label>
+            <input type="text" id="firmName" placeholder="e.g. Kavathiya & Co." required>
+          </div>
+
+          <div class="input-row">
+            <div class="input-group flex-1">
+              <label>Managing CA Name *</label>
+              <input type="text" id="ownerName" placeholder="e.g. CA Rajesh Sharma" required>
+            </div>
+            <div class="input-group flex-1">
+              <label>ICAI FRN (Optional)</label>
+              <input type="text" id="frnInput" placeholder="e.g. 104829W">
+            </div>
+          </div>
+
+          <div class="input-row">
+            <div class="input-group flex-1">
+              <label>Client Mobile (WhatsApp) *</label>
+              <input type="tel" id="ownerPhone" placeholder="10-digit number" required>
+            </div>
+            <div class="input-group flex-1">
+              <label>Client Email</label>
+              <input type="email" id="ownerEmail" placeholder="ca@practice.in">
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label>Client Hardware Machine ID (Optional / From Screen)</label>
+            <input type="text" id="machineIdInput" placeholder="e.g. RX-WIN-445282F5 (Leave blank if not provided)">
+            <span class="field-hint">If provided, license is permanently bound to this computer.</span>
+          </div>
+        </div>
+
+        <!-- SECTION: EDITION SELECTOR -->
+        <div class="form-section">
+          <h3 class="section-title">2. Target Practice Edition &amp; Price</h3>
+          <div class="edition-grid">
+            <label class="edition-option">
+              <input type="radio" name="edition" value="solo">
+              <div class="edition-card">
+                <div class="edition-header">
+                  <span class="edition-name">Solo Practitioner</span>
+                  <span class="edition-price">₹3,999/yr</span>
+                </div>
+                <div class="edition-meta">1 Bound PC Seat • 100% Offline Vault</div>
+              </div>
+            </label>
+
+            <label class="edition-option">
+              <input type="radio" name="edition" value="partner-50-50" checked>
+              <div class="edition-card">
+                <div class="edition-header">
+                  <span class="edition-name">50:50 Partner Practice</span>
+                  <span class="edition-price">₹6,999/yr</span>
+                </div>
+                <div class="edition-meta">2 Bound Seats • Generates Partner Pairing Code</div>
+              </div>
+            </label>
+
+            <label class="edition-option">
+              <input type="radio" name="edition" value="owner-article">
+              <div class="edition-card">
+                <div class="edition-header">
+                  <span class="edition-name">Principal CA + Articles</span>
+                  <span class="edition-price">₹9,999/yr</span>
+                </div>
+                <div class="edition-meta">6 Bound Seats (1 CA + 5 Trainees) • Article Code</div>
+              </div>
+            </label>
+
+            <label class="edition-option">
+              <input type="radio" name="edition" value="full-firm">
+              <div class="edition-card">
+                <div class="edition-header">
+                  <span class="edition-name">Full Chartered Firm</span>
+                  <span class="edition-price">₹17,999/yr</span>
+                </div>
+                <div class="edition-meta">15 Bound Workstations • Multi-Partner Dual Codes</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- SECTION: VALIDITY & PAYMENT -->
+        <div class="form-section">
+          <h3 class="section-title">3. Duration &amp; Payment Confirmation</h3>
+          
+          <div class="input-row">
+            <div class="input-group flex-1">
+              <label>Validity Period</label>
+              <select id="validityDays">
+                <option value="365" selected>1 Year (365 Days)</option>
+                <option value="730">2 Years (730 Days)</option>
+                <option value="1095">3 Years (Multi-Year)</option>
+                <option value="3650">Lifetime Access (10 Years)</option>
+                <option value="30">30 Days (Demo / Trial)</option>
+              </select>
+            </div>
+
+            <div class="input-group flex-1">
+              <label>Payment Method</label>
+              <select id="paymentMethod">
+                <option value="direct_upi_gpay" selected>Direct UPI (GPay/PhonePe)</option>
+                <option value="bank_neft_imps">Bank Transfer (NEFT/IMPS)</option>
+                <option value="cash_offline">Cash / In-Person</option>
+                <option value="razorpay_direct">Razorpay Gateway</option>
+                <option value="vip_complimentary">VIP / Complimentary (₹0)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" id="mintSubmitBtn" class="btn-primary submit-btn">
+          ⚡ Mint License &amp; Generate Pairing Codes
+        </button>
+      </form>
+
+      <!-- MINTED RESULT DISPLAY MODAL -->
+      <div id="resultCard" class="result-card hidden">
+        <div class="result-header">
+          <span class="success-badge">✓ LICENSE MINTED SUCCESSFULLY</span>
+          <button id="closeResultBtn" class="btn-close">×</button>
+        </div>
+
+        <div class="result-details">
+          <div class="result-row">
+            <span>Firm Name:</span>
+            <strong id="resFirm"></strong>
+          </div>
+          <div class="result-row">
+            <span>Selected Edition:</span>
+            <strong id="resEdition"></strong>
+          </div>
+          <div class="result-row">
+            <span>Validity:</span>
+            <strong id="resValidity"></strong>
+          </div>
+
+          <!-- LICENSE KEY BOX -->
+          <div class="code-box">
+            <span class="code-label">🔑 MASTER LICENSE KEY (Host PC)</span>
+            <code id="resLicenseKey" class="code-value"></code>
+          </div>
+
+          <!-- PAIRING CODES (FOR MULTI-PC) -->
+          <div id="pairingCodeContainer" class="pairing-container hidden">
+            <div class="code-box partner-box">
+              <span class="code-label">👥 PARTNER PAIRING CODE (PC 2)</span>
+              <code id="resPartnerCode" class="code-value"></code>
+            </div>
+            <div id="articleCodeBox" class="code-box article-box hidden">
+              <span class="code-label">🎓 ARTICLE TRAINEE CODE (Trainee PCs)</span>
+              <code id="resArticleCode" class="code-value"></code>
+            </div>
+          </div>
+        </div>
+
+        <!-- QUICK SHARE ACTIONS -->
+        <div class="action-buttons">
+          <button id="shareWhatsappBtn" class="btn-whatsapp">
+            <span>💬 Share on WhatsApp</span>
+          </button>
+          <button id="copyMessageBtn" class="btn-secondary">
+            <span>📋 Copy Formatted Text</span>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- TAB 2: ACTIVE LICENSES DIRECTORY -->
+    <section id="recordsTab" class="tab-content hidden">
+      <div class="records-header">
+        <input type="text" id="searchRecords" placeholder="Search firm, mobile, or license key..." class="search-input">
+        <button id="refreshRecordsBtn" class="btn-secondary btn-sm">↻ Refresh</button>
+      </div>
+      <div id="recordsList" class="records-list">
+        <div class="loading-state">Loading practice licenses from Supabase...</div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
