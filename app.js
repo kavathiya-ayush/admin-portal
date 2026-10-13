@@ -563,55 +563,236 @@
   });
 
   // ==========================================
-  // 7. ACTIVE LICENSES DIRECTORY
+  // 7. ACTIVE LICENSES DIRECTORY & REVOCATION
   // ==========================================
+  let currentFilter = 'active'; // 'active' | 'revoked' | 'all'
+  let profileMap = new Map();
+  const adminToast = document.getElementById('adminToast');
+  const filterPills = document.querySelectorAll('.filter-pill');
+
+  function showToast(message, isError = false) {
+    if (!adminToast) {
+      alert(message);
+      return;
+    }
+    adminToast.textContent = message;
+    adminToast.style.borderColor = isError ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)';
+    adminToast.style.color = isError ? '#F87171' : '#34D399';
+    adminToast.classList.remove('hidden');
+    setTimeout(() => {
+      adminToast.classList.add('hidden');
+    }, 3500);
+  }
+
+  filterPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      filterPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      currentFilter = pill.getAttribute('data-filter') || 'active';
+      applyFilterAndRender();
+    });
+  });
+
   async function loadActiveLicenses() {
     if (!supabaseClient) return;
-    recordsList.innerHTML = '<div class="loading-state">Loading active licenses...</div>';
+    recordsList.innerHTML = '<div class="loading-state">Loading verified licenses from Supabase...</div>';
     try {
-      const { data, error } = await supabaseClient
-        .from('licenses')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const [licRes, profRes] = await Promise.all([
+        supabaseClient
+          .from('licenses')
+          .select('*')
+          .neq('status', 'deleted')
+          .order('created_at', { ascending: false }),
+        supabaseClient
+          .from('user_profiles')
+          .select('email, phone, full_name, machine_id')
+          .then(res => res.data || [])
+          .catch(() => [])
+      ]);
 
-      if (error || !data) {
+      if (licRes.error || !licRes.data) {
         recordsList.innerHTML = '<div class="loading-state">No licenses found or offline.</div>';
         return;
       }
 
-      allLicenses = data;
-      recordCount.textContent = data.length;
-      renderRecords(data);
+      profileMap.clear();
+      if (Array.isArray(profRes)) {
+        profRes.forEach(p => {
+          if (p.email) profileMap.set(p.email.toLowerCase(), p);
+          if (p.machine_id) profileMap.set(p.machine_id.toUpperCase(), p);
+        });
+      }
+
+      allLicenses = licRes.data;
+      updateRecordCounter();
+      applyFilterAndRender();
     } catch (err) {
-      recordsList.innerHTML = '<div class="loading-state">Failed to fetch cloud records.</div>';
+      recordsList.innerHTML = `<div class="loading-state">Failed to fetch cloud records: ${err.message}</div>`;
     }
+  }
+
+  function updateRecordCounter() {
+    const activeCount = allLicenses.filter(l => l.status !== 'revoked' && l.machine_id && l.machine_id.trim().length > 0).length;
+    if (recordCount) {
+      recordCount.textContent = activeCount;
+    }
+  }
+
+  function applyFilterAndRender() {
+    const q = (searchRecords?.value || '').toLowerCase().trim();
+
+    let filtered = allLicenses.filter(lic => {
+      const isRevoked = lic.status === 'revoked';
+      const hasBoundPc = !!(lic.machine_id && lic.machine_id.trim().length > 0);
+
+      if (currentFilter === 'active') {
+        return !isRevoked && hasBoundPc;
+      } else if (currentFilter === 'revoked') {
+        return isRevoked;
+      } else {
+        // 'all' filter: show all non-deleted licenses
+        return true;
+      }
+    });
+
+    if (q) {
+      filtered = filtered.filter(l => 
+        (l.firm_name && l.firm_name.toLowerCase().includes(q)) ||
+        (l.owner_email && l.owner_email.toLowerCase().includes(q)) ||
+        (l.machine_id && l.machine_id.toLowerCase().includes(q)) ||
+        (l.license_key && l.license_key.toLowerCase().includes(q)) ||
+        (l.practice_edition && l.practice_edition.toLowerCase().includes(q))
+      );
+    }
+
+    renderRecords(filtered);
   }
 
   function renderRecords(items) {
     if (items.length === 0) {
-      recordsList.innerHTML = '<div class="loading-state">No matching licenses.</div>';
+      recordsList.innerHTML = `
+        <div class="loading-state">
+          ${currentFilter === 'revoked' ? 'No revoked licenses.' : 'No matching licensed users found.'}
+        </div>
+      `;
       return;
     }
 
     const html = items.map(lic => {
+      const isRevoked = lic.status === 'revoked';
       const expiresAt = new Date(lic.expires_at);
       const diffDays = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
       const isExpired = diffDays <= 0;
 
+      const userProf = profileMap.get((lic.owner_email || '').toLowerCase()) || 
+                       profileMap.get((lic.machine_id || '').toUpperCase()) || {};
+      const userPhone = userProf.phone || '';
+
+      const editionLabel = {
+        'solo': 'Solo Practitioner',
+        'partner-50-50': '50:50 Partner Practice',
+        'owner-article': 'Owner CA + Articles',
+        'full-firm': 'Enterprise Multi-Desk Firm'
+      }[lic.practice_edition] || (lic.practice_edition || 'Solo').toUpperCase();
+
+      const paymentLabel = {
+        'direct_upi_gpay': 'Direct UPI (GPay / PhonePe)',
+        'razorpay': 'Razorpay Online Gateway',
+        'vip_code': 'VIP Founder Code',
+        'offline_admin': 'Admin Issued'
+      }[lic.payment_provider] || (lic.payment_provider || 'Direct UPI');
+
+      let badgeHtml = '';
+      if (isRevoked) {
+        badgeHtml = '<span class="record-badge-status badge-revoked">🚫 REVOKED</span>';
+      } else if (isExpired) {
+        badgeHtml = `<span class="record-badge-status badge-expired">⏳ EXPIRED (${Math.abs(diffDays)}d ago)</span>`;
+      } else {
+        badgeHtml = `<span class="record-badge-status badge-active">✓ ACTIVE • ${diffDays}d Left</span>`;
+      }
+
       return `
-        <div class="record-item">
+        <div class="record-item ${isRevoked ? 'is-revoked' : ''}" data-id="${lic.id}">
           <div class="record-top">
-            <strong class="record-firm">${lic.firm_name}</strong>
-            <span class="record-badge" style="background: ${isExpired ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}; color: ${isExpired ? '#EF4444' : '#34D399'}">
-              ${isExpired ? 'Expired' : `${diffDays}d Left`}
-            </span>
+            <div class="record-firm-title">
+              <strong class="record-firm">${lic.firm_name || 'Chartered Practice'}</strong>
+            </div>
+            ${badgeHtml}
           </div>
-          <div class="record-meta">
-            <div>Edition: <strong>${lic.practice_edition}</strong> (${lic.max_seats} Seats)</div>
-            <div>PC: <strong>${lic.machine_id || 'Legacy Key'}</strong></div>
+
+          <div class="record-details-grid">
+            <div class="record-detail-item">
+              <span class="detail-label">💻 Bound PC ID</span>
+              <span class="detail-value">
+                <span class="pc-chip">${lic.machine_id || 'Unbound / Legacy'}</span>
+              </span>
+            </div>
+
+            <div class="record-detail-item">
+              <span class="detail-label">📧 Owner Email</span>
+              <span class="detail-value">${lic.owner_email || 'ayush@gmail.com'}</span>
+            </div>
+
+            <div class="record-detail-item">
+              <span class="detail-label">📱 WhatsApp Mobile</span>
+              <span class="detail-value">${userPhone ? `+91 ${userPhone}` : 'Direct Practice'}</span>
+            </div>
+
+            <div class="record-detail-item">
+              <span class="detail-label">🏷️ Practice Edition</span>
+              <span class="detail-value">${editionLabel} (${lic.max_seats || 1} Seats)</span>
+            </div>
+
+            <div class="record-detail-item">
+              <span class="detail-label">💳 Payment Method</span>
+              <span class="detail-value">${paymentLabel} • ₹${lic.amount_paid_inr || 3999}</span>
+            </div>
+
+            <div class="record-detail-item">
+              <span class="detail-label">📅 Activated Date</span>
+              <span class="detail-value">${new Date(lic.activated_at || lic.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+            </div>
+
+            <div class="record-detail-item">
+              <span class="detail-label">⌛ Expiry Deadline</span>
+              <span class="detail-value">${new Date(lic.expires_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+            </div>
+
+            <div class="record-detail-item">
+              <span class="detail-label">🛡️ Status</span>
+              <span class="detail-value" style="color: ${isRevoked ? '#F87171' : (isExpired ? '#FBBF24' : '#34D399')}">
+                ${isRevoked ? 'Revoked by Admin' : (isExpired ? 'Expired' : 'Verified & Active')}
+              </span>
+            </div>
           </div>
-          <div class="record-key">${lic.license_key}</div>
+
+          <div class="record-key-container">
+            <span class="record-key-text">${lic.license_key}</span>
+            <button class="btn-action-sm btn-copy-rec" data-action="copy-key" data-key="${lic.license_key}" title="Copy License Key">
+              📋 Copy Key
+            </button>
+          </div>
+
+          <div class="record-actions-row">
+            ${isRevoked 
+              ? `<button class="btn-action-sm btn-reactivate" data-action="reactivate" data-id="${lic.id}">
+                   ✅ Reactivate License
+                 </button>`
+              : `<button class="btn-action-sm btn-revoke" data-action="revoke" data-id="${lic.id}">
+                   🚫 Revoke License
+                 </button>`
+            }
+
+            ${userPhone ? `
+              <button class="btn-action-sm btn-copy-rec" data-action="whatsapp" data-id="${lic.id}">
+                💬 WhatsApp
+              </button>
+            ` : ''}
+
+            <button class="btn-action-sm btn-delete-rec" data-action="delete" data-id="${lic.id}" title="Remove record">
+              🗑️ Delete
+            </button>
+          </div>
         </div>
       `;
     }).join('');
@@ -619,21 +800,132 @@
     recordsList.innerHTML = html;
   }
 
-  searchRecords.addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase().trim();
-    if (!q) {
-      renderRecords(allLicenses);
+  // Delegated event handling for records actions (Revoke, Reactivate, Copy, Delete)
+  recordsList.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+
+    const action = btn.getAttribute('data-action');
+    const id = btn.getAttribute('data-id');
+    const lic = allLicenses.find(l => l.id === id);
+
+    if (action === 'copy-key') {
+      const key = btn.getAttribute('data-key');
+      if (key) {
+        navigator.clipboard.writeText(key).then(() => {
+          showToast('✓ License key copied to clipboard!');
+        });
+      }
       return;
     }
-    const filtered = allLicenses.filter(l => 
-      (l.firm_name && l.firm_name.toLowerCase().includes(q)) ||
-      (l.machine_id && l.machine_id.toLowerCase().includes(q)) ||
-      (l.license_key && l.license_key.toLowerCase().includes(q)) ||
-      (l.practice_edition && l.practice_edition.toLowerCase().includes(q))
-    );
-    renderRecords(filtered);
+
+    if (!lic || !supabaseClient) return;
+
+    if (action === 'revoke') {
+      const confirmMsg = `⚠️ IMMEDIATE REVOCATION:\nAre you sure you want to REVOKE the license for:\n• Firm: ${lic.firm_name}\n• PC: ${lic.machine_id || 'All'}\n• Key: ${lic.license_key}\n\nThe desktop software on this PC will be locked out immediately!`;
+      if (!confirm(confirmMsg)) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Revoking...';
+
+      try {
+        const { error } = await supabaseClient
+          .from('licenses')
+          .update({
+            status: 'revoked',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id);
+
+        if (error) {
+          alert('Failed to revoke license: ' + error.message);
+          btn.disabled = false;
+          btn.textContent = '🚫 Revoke License';
+        } else {
+          lic.status = 'revoked';
+          updateRecordCounter();
+          showToast(`🚫 License for "${lic.firm_name}" (PC: ${lic.machine_id}) REVOKED instantly!`, true);
+          applyFilterAndRender();
+        }
+      } catch (err) {
+        alert('Revocation error: ' + err.message);
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    if (action === 'reactivate') {
+      if (!confirm(`Reactivate license for "${lic.firm_name}" (PC: ${lic.machine_id})?`)) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Reactivating...';
+
+      try {
+        const { error } = await supabaseClient
+          .from('licenses')
+          .update({
+            status: 'active',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id);
+
+        if (error) {
+          alert('Failed to reactivate: ' + error.message);
+          btn.disabled = false;
+          btn.textContent = '✅ Reactivate License';
+        } else {
+          lic.status = 'active';
+          updateRecordCounter();
+          showToast(`✓ License for "${lic.firm_name}" re-activated successfully!`);
+          applyFilterAndRender();
+        }
+      } catch (err) {
+        alert('Reactivation error: ' + err.message);
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    if (action === 'delete') {
+      if (!confirm(`Permanently remove license record for "${lic.firm_name}" (${lic.license_key})?`)) return;
+
+      btn.disabled = true;
+      try {
+        const { error } = await supabaseClient
+          .from('licenses')
+          .update({
+            status: 'deleted',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id);
+
+        if (error) {
+          alert('Delete error: ' + error.message);
+          btn.disabled = false;
+        } else {
+          allLicenses = allLicenses.filter(l => l.id !== id);
+          updateRecordCounter();
+          showToast('Record removed.');
+          applyFilterAndRender();
+        }
+      } catch (err) {
+        alert('Delete error: ' + err.message);
+      }
+      return;
+    }
+
+    if (action === 'whatsapp') {
+      const userProf = profileMap.get((lic.owner_email || '').toLowerCase()) || 
+                       profileMap.get((lic.machine_id || '').toUpperCase()) || {};
+      const cleanPhone = (userProf.phone || '').replace(/[^0-9]/g, '');
+      const phoneParam = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+      const msg = `*ReconX CA Practice OS License*\n\nFirm: ${lic.firm_name}\nPC: ${lic.machine_id}\nLicense Key: ${lic.license_key}\nStatus: ${lic.status === 'revoked' ? 'REVOKED' : 'Active'}`;
+      const waUrl = phoneParam ? `https://wa.me/${phoneParam}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      window.open(waUrl, '_blank');
+    }
   });
 
+  searchRecords.addEventListener('input', applyFilterAndRender);
   refreshRecordsBtn.addEventListener('click', loadActiveLicenses);
 
   // Initialize on load

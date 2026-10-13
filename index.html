@@ -221,14 +221,23 @@
     <!-- TAB 2: ACTIVE LICENSES DIRECTORY -->
     <section id="recordsTab" class="tab-content hidden">
       <div class="records-header">
-        <input type="text" id="searchRecords" placeholder="Search firm, mobile, or license key..." class="search-input">
+        <input type="text" id="searchRecords" placeholder="Search firm, email, PC ID, or license key..." class="search-input">
         <button id="refreshRecordsBtn" class="btn-secondary btn-sm">↻ Refresh</button>
       </div>
+
+      <div class="records-filter-bar">
+        <button class="filter-pill active" data-filter="active">✓ Active Licensed Users</button>
+        <button class="filter-pill" data-filter="revoked">🚫 Revoked Licenses</button>
+        <button class="filter-pill" data-filter="all">All Records</button>
+      </div>
+
       <div id="recordsList" class="records-list">
-        <div class="loading-state">Loading practice licenses from Supabase...</div>
+        <div class="loading-state">Loading verified licenses from Supabase...</div>
       </div>
     </section>
   </div>
+
+  <div id="adminToast" class="admin-toast hidden"></div>
 
   <script src="app.js"></script>
 </body>
