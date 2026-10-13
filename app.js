@@ -173,9 +173,9 @@
   });
 
   // ==========================================
-  // 3. CRYPTOGRAPHIC KEY GENERATOR
+  // 3. CRYPTOGRAPHIC KEY GENERATOR (BOUND TO MACHINE ID)
   // ==========================================
-  function generateAlgorithmicLicenseKey(edition, days = 365) {
+  function generateAlgorithmicLicenseKey(edition, days = 365, machineId = '') {
     const editionMap = {
       'solo': 'SOLO',
       'partner-50-50': 'P50',
@@ -185,15 +185,24 @@
 
     const edCode = editionMap[edition] || 'SOLO';
     const dayCode = days >= 3650 ? 'LT' : `${days}D`;
-    const randBlock = Math.random().toString(36).substring(2, 6).toUpperCase();
+    
+    // Extract clean Machine ID hash block
+    let midBlock = '';
+    let cleanMid = '';
+    if (machineId && machineId.trim()) {
+      cleanMid = machineId.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      midBlock = cleanMid.slice(-4).padStart(4, 'M');
+    } else {
+      midBlock = Math.random().toString(36).substring(2, 6).toUpperCase();
+    }
 
-    // Deterministic checksum using salt from Vercel env
-    const seed = `${edCode}-${dayCode}-${randBlock}-${HMAC_SECRET_SALT}`;
+    // Deterministic checksum embedding machine ID
+    const seed = `${edCode}-${dayCode}-${midBlock}-${cleanMid}-${HMAC_SECRET_SALT}`;
     let hash = 0;
     for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash) + seed.charCodeAt(i);
     const checksum = Math.abs(hash).toString(36).substring(0, 4).toUpperCase().padStart(4, 'X');
 
-    return `RX-${edCode}-${dayCode}-${randBlock}-${checksum}`;
+    return `RX-${edCode}-${dayCode}-${midBlock}-${checksum}`;
   }
 
   function generatePairingCode(prefix = 'PT') {
@@ -226,7 +235,16 @@
     const frn = document.getElementById('frnInput').value.trim();
     const ownerPhone = document.getElementById('ownerPhone').value.replace(/[^0-9]/g, '');
     const ownerEmail = document.getElementById('ownerEmail').value.trim() || `${ownerPhone}@practice.in`;
-    const machineId = document.getElementById('machineIdInput').value.trim();
+    const rawMachineId = document.getElementById('machineIdInput').value.trim();
+
+    if (!rawMachineId) {
+      alert('Client Hardware Machine ID is mandatory! The license key is strictly locked to this specific computer.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = '⚡ Mint License & Generate Pairing Codes';
+      return;
+    }
+    const machineId = rawMachineId.toUpperCase();
+
     const edition = document.querySelector('input[name="edition"]:checked').value;
     const validityDays = parseInt(document.getElementById('validityDays').value, 10);
     const paymentMethod = document.getElementById('paymentMethod').value;
@@ -240,23 +258,31 @@
     const seatMap = { 'solo': 1, 'partner-50-50': 2, 'owner-article': 6, 'full-firm': 15 };
     const priceMap = { 'solo': 3999, 'partner-50-50': 6999, 'owner-article': 9999, 'full-firm': 17999 };
 
-    // 1. Generate License Key
-    const licenseKey = generateAlgorithmicLicenseKey(edition, validityDays);
+    // 1. Generate License Key strictly bound to this Machine ID
+    const licenseKey = generateAlgorithmicLicenseKey(edition, validityDays, machineId);
 
-    // 2. Generate Pairing Codes if multi-machine
+    // 2. Generate Pairing Codes STRICTLY based on selected installation edition
     let partnerCode = null;
     let articleCode = null;
-    if (edition === 'partner-50-50' || edition === 'full-firm') {
+    if (edition === 'partner-50-50') {
       partnerCode = generatePairingCode('PT');
-    }
-    if (edition === 'owner-article' || edition === 'full-firm') {
+      articleCode = null;
+    } else if (edition === 'owner-article') {
+      partnerCode = null;
       articleCode = generatePairingCode('AT');
+    } else if (edition === 'full-firm') {
+      partnerCode = generatePairingCode('PT');
+      articleCode = generatePairingCode('AT');
+    } else {
+      // Solo: Zero pairing codes!
+      partnerCode = null;
+      articleCode = null;
     }
 
     const now = new Date();
     const expiresDate = new Date(now.getTime() + validityDays * 24 * 60 * 60 * 1000);
 
-    // 3. Save into Supabase 'licenses' table
+    // 3. Save into Supabase 'licenses' table with bound machine_id
     try {
       const licensePayload = {
         firm_name: firmName,
@@ -264,6 +290,7 @@
         owner_email: ownerEmail,
         practice_edition: edition,
         license_key: licenseKey,
+        machine_id: machineId,
         max_seats: seatMap[edition],
         status: 'active',
         payment_provider: paymentMethod,
@@ -283,7 +310,7 @@
         console.warn('[Supabase License Upsert Notice]:', licErr.message);
       }
 
-      // 4. Save/Update host profile in 'user_profiles' with pairing codes
+      // 4. Save/Update host profile in 'user_profiles' with pairing codes and machine_id
       const hostProfilePayload = {
         email: ownerEmail,
         full_name: ownerName,
@@ -291,7 +318,7 @@
         role: 'owner',
         firm_name: firmName,
         frn: frn || null,
-        machine_id: machineId || `HOST-${Date.now().toString(36).toUpperCase()}`,
+        machine_id: machineId,
         practice_edition: edition,
         partner_pairing_code: partnerCode,
         article_pairing_code: articleCode,
@@ -304,7 +331,7 @@
         .from('user_profiles')
         .upsert(hostProfilePayload, { onConflict: 'email,machine_id' });
 
-      // 5. Pre-bind machine into license_seats if provided
+      // 5. Pre-bind machine into license_seats
       if (licRow?.id && machineId) {
         await supabaseClient
           .from('license_seats')
@@ -324,6 +351,7 @@
         firmName,
         ownerName,
         ownerPhone,
+        machineId,
         edition: editionNames[edition],
         validityDays,
         licenseKey,
@@ -378,28 +406,39 @@
     msg += `-----------------------------------------\n`;
     msg += `*Firm:* ${data.firmName}\n`;
     msg += `*Managing CA:* ${data.ownerName}\n`;
-    msg += `*Plan:* ${data.edition}\n`;
+    msg += `*Plan Edition:* ${data.edition}\n`;
+    msg += `*Locked Computer (Machine ID):* \`${data.machineId}\`\n`;
     msg += `*Validity:* ${data.validityDays} Days (Active)\n\n`;
-    msg += `🔑 *LICENSE KEY (Host PC):*\n`;
-    msg += `\`${data.licenseKey}\`\n\n`;
+    msg += `🔑 *MASTER LICENSE KEY (Host PC):*\n`;
+    msg += `\`${data.licenseKey}\`\n`;
+    msg += `_(Note: This key will ONLY work on computer ${data.machineId})_\n\n`;
 
     if (data.partnerCode) {
       msg += `👥 *PARTNER PAIRING CODE (PC 2):*\n`;
-      msg += `\`${data.partnerCode}\`\n\n`;
+      msg += `\`${data.partnerCode}\`\n`;
+      msg += `📡 *Network Rule:* PC 1 and PC 2 must be connected to the SAME office Local Area Network (Wi-Fi/LAN router) to pair.\n\n`;
     }
 
     if (data.articleCode) {
       msg += `🎓 *ARTICLE TRAINEE CODE (Articles):*\n`;
-      msg += `\`${data.articleCode}\`\n\n`;
+      msg += `\`${data.articleCode}\`\n`;
+      msg += `📡 *Network Rule:* Article laptops must be connected to the SAME office Local Area Network (Wi-Fi/LAN router) to link.\n\n`;
+    }
+
+    if (!data.partnerCode && !data.articleCode) {
+      msg += `🔒 *100% Offline Vault:* Solo edition runs completely on this single PC hard drive with zero cloud dependence.\n\n`;
     }
 
     msg += `📋 *Quick Instructions:*\n`;
-    msg += `1. On your PC (Host), paste the *License Key* in ReconX to unlock.\n`;
+    msg += `1. On your PC (${data.machineId}), paste the *License Key* in ReconX to unlock.\n`;
     if (data.partnerCode) {
-      msg += `2. On Partner PC, select *"Join Existing Firm"* & enter the Partner Pairing Code.\n`;
+      msg += `2. On Partner PC (connected to the same office Wi-Fi), select *"Join Existing Firm"* & enter the Partner Pairing Code.\n`;
     }
     msg += `-----------------------------------------\n`;
     msg += `Support: Ayush / ReconX Office Support`;
+
+    return msg;
+  }
 
     return msg;
   }
