@@ -440,9 +440,6 @@
     return msg;
   }
 
-    return msg;
-  }
-
   shareWhatsappBtn.addEventListener('click', () => {
     if (!lastMintedData) return;
     const msg = buildWhatsAppMessage(lastMintedData);
