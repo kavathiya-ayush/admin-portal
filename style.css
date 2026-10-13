@@ -229,6 +229,54 @@ input:focus, select:focus {
   margin-top: 0.25rem;
 }
 
+/* DETECTED MACHINE PROFILE CARD */
+.detected-card {
+  margin-top: 0.85rem;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1.5px solid #10B981;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  animation: fadeIn 0.25s ease-in-out;
+}
+.detected-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #34D399;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+.detected-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: #E2E8F0;
+}
+.detected-grid strong {
+  color: #94A3B8;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  display: inline-block;
+  min-width: 95px;
+}
+.highlight-text {
+  color: #38BDF8;
+  font-weight: 700;
+}
+.not-found-card {
+  margin-top: 0.85rem;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1.5px solid #3B82F6;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  color: #93C5FD;
+}
+
 /* EDITION GRID */
 .edition-grid {
   display: flex;

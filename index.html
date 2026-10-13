@@ -74,41 +74,42 @@
     <main id="mintTab" class="tab-content active">
       <form id="mintForm" class="mint-form" onsubmit="return false;">
         
-        <!-- SECTION: PRACTICE DETAILS -->
+        <!-- SECTION: HARDWARE MACHINE ID BINDING -->
         <div class="form-section">
-          <h3 class="section-title">1. CA Practice Information</h3>
+          <h3 class="section-title">1. Target Computer Machine ID</h3>
           
           <div class="input-group">
-            <label>CA Firm Name *</label>
-            <input type="text" id="firmName" placeholder="e.g. Kavathiya & Co." required>
+            <label>Client Computer Machine ID (from client ReconX screen) *</label>
+            <div style="display: flex; gap: 0.5rem;">
+              <input 
+                type="text" 
+                id="machineIdInput" 
+                placeholder="e.g. RX-WIN-445282F5" 
+                required
+                autocomplete="off"
+                style="flex: 1; font-family: monospace; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.05em;"
+              >
+              <button type="button" id="lookupMachineBtn" class="btn-secondary" style="padding: 0 1rem; white-space: nowrap; font-size: 0.8rem; font-weight: 700;">
+                🔍 Find Profile
+              </button>
+            </div>
+            <span class="field-hint">The system automatically looks up this machine's registered firm profile in Supabase.</span>
           </div>
 
-          <div class="input-row">
-            <div class="input-group flex-1">
-              <label>Managing CA Name *</label>
-              <input type="text" id="ownerName" placeholder="e.g. CA Rajesh Sharma" required>
-            </div>
-            <div class="input-group flex-1">
-              <label>ICAI FRN (Optional)</label>
-              <input type="text" id="frnInput" placeholder="e.g. 104829W">
-            </div>
-          </div>
-
-          <div class="input-row">
-            <div class="input-group flex-1">
-              <label>Client Mobile (WhatsApp) *</label>
-              <input type="tel" id="ownerPhone" placeholder="10-digit number" required>
-            </div>
-            <div class="input-group flex-1">
-              <label>Client Email</label>
-              <input type="email" id="ownerEmail" placeholder="ca@practice.in">
+          <!-- Detected Profile Card (Auto-populated from Supabase) -->
+          <div id="detectedProfileCard" class="detected-card hidden">
+            <div class="detected-badge">✓ Machine Profile Linked</div>
+            <div class="detected-grid">
+              <div><strong>Firm Name:</strong> <span id="detFirmName">-</span></div>
+              <div><strong>Managing CA:</strong> <span id="detCaName">-</span></div>
+              <div><strong>WhatsApp:</strong> <span id="detPhone">-</span></div>
+              <div><strong>FRN:</strong> <span id="detFrn">-</span></div>
+              <div><strong>Setup Edition:</strong> <span id="detEdition" class="highlight-text">-</span></div>
             </div>
           </div>
 
-          <div class="input-group">
-            <label>Client Computer Machine ID (Mandatory — from ReconX screen) *</label>
-            <input type="text" id="machineIdInput" placeholder="e.g. RX-WIN-445282F5" required>
-            <span class="field-hint">The license key is cryptographically locked to this computer. It will ONLY work on this PC.</span>
+          <div id="unregisteredMachineCard" class="not-found-card hidden">
+            ℹ️ New Machine ID. Minting license will bind permanently to this hardware.
           </div>
         </div>
 

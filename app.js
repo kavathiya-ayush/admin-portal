@@ -7,15 +7,16 @@
  */
 
 (() => {
-  // Dynamically initialized upon authentication (named supabaseClient to avoid CDN global collision)
+  // Dynamically initialized upon authentication
   let supabaseClient = null;
   let HMAC_SECRET_SALT = '';
 
   // State
   let allLicenses = [];
   let lastMintedData = null;
+  let detectedUserProfile = null;
 
-  // DOM Elements
+  // DOM Elements - Authentication
   const authScreen = document.getElementById('authScreen');
   const appScreen = document.getElementById('appScreen');
   const authForm = document.getElementById('authForm');
@@ -23,11 +24,23 @@
   const authError = document.getElementById('authError');
   const logoutBtn = document.getElementById('logoutBtn');
 
+  // Navigation
   const tabBtns = document.querySelectorAll('.tab-btn');
   const tabContents = document.querySelectorAll('.tab-content');
   const mintForm = document.getElementById('mintForm');
   const resultCard = document.getElementById('resultCard');
   const closeResultBtn = document.getElementById('closeResultBtn');
+
+  // Single Machine Input & Auto-Detected Profile Elements
+  const machineIdInput = document.getElementById('machineIdInput');
+  const lookupMachineBtn = document.getElementById('lookupMachineBtn');
+  const detectedProfileCard = document.getElementById('detectedProfileCard');
+  const unregisteredMachineCard = document.getElementById('unregisteredMachineCard');
+  const detFirmName = document.getElementById('detFirmName');
+  const detCaName = document.getElementById('detCaName');
+  const detPhone = document.getElementById('detPhone');
+  const detFrn = document.getElementById('detFrn');
+  const detEdition = document.getElementById('detEdition');
 
   // Result Elements
   const resFirm = document.getElementById('resFirm');
@@ -56,7 +69,6 @@
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.passkey) {
-          // Re-validate against /api/config
           const ok = await authenticateWithBackend(parsed.passkey, false);
           if (ok) {
             showApp();
@@ -103,15 +115,11 @@
         return false;
       }
 
-      // Initialize Supabase Client safely using window.supabase CDN
       if (window.supabase && typeof window.supabase.createClient === 'function') {
         supabaseClient = window.supabase.createClient(data.supabaseUrl, data.supabaseAnonKey);
-      } else {
-        console.warn('Supabase SDK not loaded globally from CDN');
       }
       HMAC_SECRET_SALT = data.hmacSalt;
 
-      // Cache session in localStorage for convenient mobile access
       localStorage.setItem('reconx_founder_session', JSON.stringify({
         passkey: passkey.trim(),
         config: data
@@ -121,7 +129,7 @@
       return true;
     } catch (err) {
       if (showAlertOnError) {
-        authError.textContent = 'Connection error: ' + (err.message || 'Cannot reach /api/config. Ensure site is deployed on Vercel.');
+        authError.textContent = 'Connection error: ' + (err.message || 'Cannot reach /api/config.');
         authError.classList.remove('hidden');
       }
       return false;
@@ -173,7 +181,63 @@
   });
 
   // ==========================================
-  // 3. CRYPTOGRAPHIC KEY GENERATOR (BOUND TO MACHINE ID)
+  // 3. AUTO-LOOKUP USER PROFILE FROM MACHINE ID
+  // ==========================================
+  async function lookupMachineProfile(mid) {
+    if (!supabaseClient || !mid) return;
+    const cleanMid = mid.trim().toUpperCase();
+    if (cleanMid.length < 4) return;
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('user_profiles')
+        .select('*')
+        .or(`machine_id.eq.${cleanMid},machine_id.ilike.%${cleanMid.replace('RX-WIN-', '')}%`)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        detectedUserProfile = data[0];
+        detFirmName.textContent = detectedUserProfile.firm_name || 'Chartered Practice Firm';
+        detCaName.textContent = detectedUserProfile.full_name || 'Managing CA';
+        detPhone.textContent = detectedUserProfile.phone || 'Not Registered';
+        detFrn.textContent = detectedUserProfile.frn || 'None';
+        
+        const ed = detectedUserProfile.practice_edition || 'solo';
+        const edLabels = {
+          'solo': 'Solo Practitioner (1 PC)',
+          'partner-50-50': '50:50 Partner Practice (2 PCs)',
+          'owner-article': 'Principal CA + Articleship (6 PCs)',
+          'full-firm': 'Full Chartered Firm (15 PCs)'
+        };
+        detEdition.textContent = edLabels[ed] || ed;
+
+        // Auto-select the edition that the CA chose during installation
+        const radio = document.querySelector(`input[name="edition"][value="${ed}"]`);
+        if (radio) radio.checked = true;
+
+        detectedProfileCard.classList.remove('hidden');
+        unregisteredMachineCard.classList.add('hidden');
+      } else {
+        detectedUserProfile = null;
+        detectedProfileCard.classList.add('hidden');
+        unregisteredMachineCard.classList.remove('hidden');
+      }
+    } catch (e) {
+      console.warn('Machine profile lookup note:', e);
+    }
+  }
+
+  if (machineIdInput) {
+    machineIdInput.addEventListener('change', () => lookupMachineProfile(machineIdInput.value));
+    machineIdInput.addEventListener('blur', () => lookupMachineProfile(machineIdInput.value));
+  }
+  if (lookupMachineBtn) {
+    lookupMachineBtn.addEventListener('click', () => lookupMachineProfile(machineIdInput.value));
+  }
+
+  // ==========================================
+  // 4. CRYPTOGRAPHIC KEY GENERATOR (BOUND TO MACHINE ID)
   // ==========================================
   function generateAlgorithmicLicenseKey(edition, days = 365, machineId = '') {
     const editionMap = {
@@ -215,7 +279,7 @@
   }
 
   // ==========================================
-  // 4. MINT LICENSE ACTION
+  // 5. MINT LICENSE ACTION (ONLY MACHINE ID REQUIRED)
   // ==========================================
   mintForm.addEventListener('submit', async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -226,24 +290,27 @@
       return;
     }
 
+    const rawMachineId = machineIdInput.value.trim();
+    if (!rawMachineId) {
+      alert('Please enter the Client Computer Machine ID.');
+      return;
+    }
+    const machineId = rawMachineId.toUpperCase();
+
     const submitBtn = document.getElementById('mintSubmitBtn');
     submitBtn.disabled = true;
     submitBtn.textContent = '⏳ Minting & Registering on Cloud...';
 
-    const firmName = document.getElementById('firmName').value.trim();
-    const ownerName = document.getElementById('ownerName').value.trim();
-    const frn = document.getElementById('frnInput').value.trim();
-    const ownerPhone = document.getElementById('ownerPhone').value.replace(/[^0-9]/g, '');
-    const ownerEmail = document.getElementById('ownerEmail').value.trim() || `${ownerPhone}@practice.in`;
-    const rawMachineId = document.getElementById('machineIdInput').value.trim();
-
-    if (!rawMachineId) {
-      alert('Client Hardware Machine ID is mandatory! The license key is strictly locked to this specific computer.');
-      submitBtn.disabled = false;
-      submitBtn.textContent = '⚡ Mint License & Generate Pairing Codes';
-      return;
+    // If profile was not looked up yet, trigger quick lookup
+    if (!detectedUserProfile) {
+      await lookupMachineProfile(machineId);
     }
-    const machineId = rawMachineId.toUpperCase();
+
+    const firmName = detectedUserProfile?.firm_name || `Chartered Practice (${machineId.slice(-6)})`;
+    const ownerName = detectedUserProfile?.full_name || 'Managing CA';
+    const ownerPhone = detectedUserProfile?.phone || '';
+    const ownerEmail = detectedUserProfile?.email || `${machineId.toLowerCase()}@practice.internal`;
+    const frn = detectedUserProfile?.frn || null;
 
     const edition = document.querySelector('input[name="edition"]:checked').value;
     const validityDays = parseInt(document.getElementById('validityDays').value, 10);
@@ -274,7 +341,6 @@
       partnerCode = generatePairingCode('PT');
       articleCode = generatePairingCode('AT');
     } else {
-      // Solo: Zero pairing codes!
       partnerCode = null;
       articleCode = null;
     }
@@ -286,7 +352,7 @@
     try {
       const licensePayload = {
         firm_name: firmName,
-        frn: frn || null,
+        frn: frn,
         owner_email: ownerEmail,
         practice_edition: edition,
         license_key: licenseKey,
@@ -310,26 +376,18 @@
         console.warn('[Supabase License Upsert Notice]:', licErr.message);
       }
 
-      // 4. Save/Update host profile in 'user_profiles' with pairing codes and machine_id
-      const hostProfilePayload = {
-        email: ownerEmail,
-        full_name: ownerName,
-        phone: ownerPhone,
-        role: 'owner',
-        firm_name: firmName,
-        frn: frn || null,
-        machine_id: machineId,
-        practice_edition: edition,
-        partner_pairing_code: partnerCode,
-        article_pairing_code: articleCode,
-        email_verified: true,
-        last_login_at: now.toISOString(),
-        updated_at: now.toISOString()
-      };
-
-      await supabaseClient
-        .from('user_profiles')
-        .upsert(hostProfilePayload, { onConflict: 'email,machine_id' });
+      // 4. Update host profile in 'user_profiles' with pairing codes if present
+      if (detectedUserProfile) {
+        await supabaseClient
+          .from('user_profiles')
+          .update({
+            practice_edition: edition,
+            partner_pairing_code: partnerCode,
+            article_pairing_code: articleCode,
+            updated_at: now.toISOString()
+          })
+          .eq('machine_id', machineId);
+      }
 
       // 5. Pre-bind machine into license_seats
       if (licRow?.id && machineId) {
@@ -399,7 +457,7 @@
   });
 
   // ==========================================
-  // 5. WHATSAPP & CLIPBOARD SHARING
+  // 6. WHATSAPP & CLIPBOARD SHARING
   // ==========================================
   function buildWhatsAppMessage(data) {
     let msg = `🏛️ *ReconX Office Management OS — Official License*\n`;
@@ -416,7 +474,7 @@
     if (data.partnerCode) {
       msg += `👥 *PARTNER PAIRING CODE (PC 2):*\n`;
       msg += `\`${data.partnerCode}\`\n`;
-      msg += `📡 *Network Rule:* PC 1 and PC 2 must be connected to the SAME office Local Area Network (Wi-Fi/LAN router) to pair.\n\n`;
+      msg += `📡 *Network Rule:* Both PC 1 and PC 2 must be connected to the SAME office Local Area Network (Wi-Fi/LAN router) to pair.\n\n`;
     }
 
     if (data.articleCode) {
@@ -443,9 +501,9 @@
   shareWhatsappBtn.addEventListener('click', () => {
     if (!lastMintedData) return;
     const msg = buildWhatsAppMessage(lastMintedData);
-    const cleanPhone = lastMintedData.ownerPhone.replace(/[^0-9]/g, '');
+    const cleanPhone = (lastMintedData.ownerPhone || '').replace(/[^0-9]/g, '');
     const phoneParam = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const waUrl = `https://wa.me/${phoneParam}?text=${encodeURIComponent(msg)}`;
+    const waUrl = phoneParam ? `https://wa.me/${phoneParam}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
     window.open(waUrl, '_blank');
   });
 
@@ -458,7 +516,7 @@
   });
 
   // ==========================================
-  // 6. ACTIVE LICENSES DIRECTORY
+  // 7. ACTIVE LICENSES DIRECTORY
   // ==========================================
   async function loadActiveLicenses() {
     if (!supabaseClient) return;
@@ -504,7 +562,7 @@
           </div>
           <div class="record-meta">
             <div>Edition: <strong>${lic.practice_edition}</strong> (${lic.max_seats} Seats)</div>
-            <div>Owner: ${lic.owner_email} • Paid: ₹${lic.amount_paid_inr || 0}</div>
+            <div>PC: <strong>${lic.machine_id || 'Legacy Key'}</strong></div>
           </div>
           <div class="record-key">${lic.license_key}</div>
         </div>
@@ -522,7 +580,7 @@
     }
     const filtered = allLicenses.filter(l => 
       (l.firm_name && l.firm_name.toLowerCase().includes(q)) ||
-      (l.owner_email && l.owner_email.toLowerCase().includes(q)) ||
+      (l.machine_id && l.machine_id.toLowerCase().includes(q)) ||
       (l.license_key && l.license_key.toLowerCase().includes(q)) ||
       (l.practice_edition && l.practice_edition.toLowerCase().includes(q))
     );
