@@ -98,74 +98,43 @@
 
           <!-- Detected Profile Card (Auto-populated from Supabase) -->
           <div id="detectedProfileCard" class="detected-card hidden">
-            <div class="detected-badge">✓ Machine Profile Linked</div>
+            <div class="detected-header-row">
+              <div class="detected-badge">✓ Machine Profile Linked</div>
+              <span id="detEditionBadge" class="edition-pill">-</span>
+            </div>
             <div class="detected-grid">
               <div><strong>Firm Name:</strong> <span id="detFirmName">-</span></div>
               <div><strong>Managing CA:</strong> <span id="detCaName">-</span></div>
               <div><strong>WhatsApp:</strong> <span id="detPhone">-</span></div>
               <div><strong>FRN:</strong> <span id="detFrn">-</span></div>
               <div><strong>Setup Edition:</strong> <span id="detEdition" class="highlight-text">-</span></div>
+              <div><strong>Seat Quota:</strong> <span id="detSeats" style="color: #F8FAFC;">-</span></div>
+              <div><strong>Standard Price:</strong> <span id="detPrice" class="price-highlight">-</span></div>
             </div>
           </div>
 
           <div id="unregisteredMachineCard" class="not-found-card hidden">
-            ℹ️ New Machine ID. Minting license will bind permanently to this hardware.
-          </div>
-        </div>
-
-        <!-- SECTION: EDITION SELECTOR -->
-        <div class="form-section">
-          <h3 class="section-title">2. Target Practice Edition &amp; Price</h3>
-          <div class="edition-grid">
-            <label class="edition-option">
-              <input type="radio" name="edition" value="solo">
-              <div class="edition-card">
-                <div class="edition-header">
-                  <span class="edition-name">Solo Practitioner</span>
-                  <span class="edition-price">₹3,999/yr</span>
-                </div>
-                <div class="edition-meta">1 Bound PC Seat • 100% Offline Vault</div>
-              </div>
-            </label>
-
-            <label class="edition-option">
-              <input type="radio" name="edition" value="partner-50-50" checked>
-              <div class="edition-card">
-                <div class="edition-header">
-                  <span class="edition-name">50:50 Partner Practice</span>
-                  <span class="edition-price">₹6,999/yr</span>
-                </div>
-                <div class="edition-meta">2 Bound Seats • Generates Partner Pairing Code</div>
-              </div>
-            </label>
-
-            <label class="edition-option">
-              <input type="radio" name="edition" value="owner-article">
-              <div class="edition-card">
-                <div class="edition-header">
-                  <span class="edition-name">Principal CA + Articles</span>
-                  <span class="edition-price">₹9,999/yr</span>
-                </div>
-                <div class="edition-meta">6 Bound Seats (1 CA + 5 Trainees) • Article Code</div>
-              </div>
-            </label>
-
-            <label class="edition-option">
-              <input type="radio" name="edition" value="full-firm">
-              <div class="edition-card">
-                <div class="edition-header">
-                  <span class="edition-name">Full Chartered Firm</span>
-                  <span class="edition-price">₹17,999/yr</span>
-                </div>
-                <div class="edition-meta">15 Bound Workstations • Multi-Partner Dual Codes</div>
-              </div>
-            </label>
+            <div style="font-weight: 700; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+              <span>ℹ️</span> <span>Unregistered Machine ID</span>
+            </div>
+            <div style="font-size: 0.76rem; color: #94A3B8; margin-bottom: 0.5rem; line-height: 1.4;">
+              No cloud setup profile found yet. System will default to Solo, or you can specify the target edition below:
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <label for="fallbackEdition" style="font-size: 0.72rem; color: #94A3B8; text-transform: uppercase; font-weight: 700; white-space: nowrap;">Edition:</label>
+              <select id="fallbackEdition" style="flex: 1; padding: 0.45rem 0.6rem; font-size: 0.78rem; background: #061922; border: 1px solid #1E293B; color: #E2E8F0; border-radius: 8px;">
+                <option value="solo" selected>Solo Practitioner (1 PC • ₹3,999/yr)</option>
+                <option value="partner-50-50">50:50 Partner Practice (2 PCs • ₹6,999/yr)</option>
+                <option value="owner-article">Principal CA + Articles (6 PCs • ₹9,999/yr)</option>
+                <option value="full-firm">Full Chartered Firm (15 PCs • ₹17,999/yr)</option>
+              </select>
+            </div>
           </div>
         </div>
 
         <!-- SECTION: VALIDITY & PAYMENT -->
         <div class="form-section">
-          <h3 class="section-title">3. Duration &amp; Payment Confirmation</h3>
+          <h3 class="section-title">2. Duration &amp; Payment Confirmation</h3>
           
           <div class="input-row">
             <div class="input-group flex-1">

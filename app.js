@@ -41,6 +41,10 @@
   const detPhone = document.getElementById('detPhone');
   const detFrn = document.getElementById('detFrn');
   const detEdition = document.getElementById('detEdition');
+  const detSeats = document.getElementById('detSeats');
+  const detPrice = document.getElementById('detPrice');
+  const detEditionBadge = document.getElementById('detEditionBadge');
+  const fallbackEdition = document.getElementById('fallbackEdition');
 
   // Result Elements
   const resFirm = document.getElementById('resFirm');
@@ -183,10 +187,42 @@
   // ==========================================
   // 3. AUTO-LOOKUP USER PROFILE FROM MACHINE ID
   // ==========================================
+  const EDITION_META = {
+    'solo': {
+      name: 'Solo Practitioner (1 PC)',
+      seats: '1 Bound Workstation • 100% Offline Vault',
+      price: '₹3,999 / year',
+      pill: 'Solo Practice'
+    },
+    'partner-50-50': {
+      name: '50:50 Partner Practice (2 PCs)',
+      seats: '2 Bound Workstations • Generates Partner Pairing Code',
+      price: '₹6,999 / year',
+      pill: '50:50 Partner'
+    },
+    'owner-article': {
+      name: 'Principal CA + Articles (6 PCs)',
+      seats: '6 Bound Seats (1 Principal CA + 5 Articles)',
+      price: '₹9,999 / year',
+      pill: 'CA + Articles'
+    },
+    'full-firm': {
+      name: 'Full Chartered Firm (15 PCs)',
+      seats: '15 Bound Seats • Multi-Partner Dual Codes',
+      price: '₹17,999 / year',
+      pill: 'Full Firm'
+    }
+  };
+
   async function lookupMachineProfile(mid) {
     if (!supabaseClient || !mid) return;
     const cleanMid = mid.trim().toUpperCase();
     if (cleanMid.length < 4) return;
+
+    if (lookupMachineBtn) {
+      lookupMachineBtn.textContent = '⏳ Looking up...';
+      lookupMachineBtn.disabled = true;
+    }
 
     try {
       const { data, error } = await supabaseClient
@@ -198,37 +234,45 @@
 
       if (!error && data && data.length > 0) {
         detectedUserProfile = data[0];
-        detFirmName.textContent = detectedUserProfile.firm_name || 'Chartered Practice Firm';
-        detCaName.textContent = detectedUserProfile.full_name || 'Managing CA';
-        detPhone.textContent = detectedUserProfile.phone || 'Not Registered';
-        detFrn.textContent = detectedUserProfile.frn || 'None';
+        if (detFirmName) detFirmName.textContent = detectedUserProfile.firm_name || 'Chartered Practice Firm';
+        if (detCaName) detCaName.textContent = detectedUserProfile.full_name || 'Managing CA';
+        if (detPhone) detPhone.textContent = detectedUserProfile.phone || 'Not Registered';
+        if (detFrn) detFrn.textContent = detectedUserProfile.frn || 'None';
         
         const ed = detectedUserProfile.practice_edition || 'solo';
-        const edLabels = {
-          'solo': 'Solo Practitioner (1 PC)',
-          'partner-50-50': '50:50 Partner Practice (2 PCs)',
-          'owner-article': 'Principal CA + Articleship (6 PCs)',
-          'full-firm': 'Full Chartered Firm (15 PCs)'
-        };
-        detEdition.textContent = edLabels[ed] || ed;
+        const meta = EDITION_META[ed] || EDITION_META['solo'];
 
-        // Auto-select the edition that the CA chose during installation
-        const radio = document.querySelector(`input[name="edition"][value="${ed}"]`);
-        if (radio) radio.checked = true;
+        if (detEdition) detEdition.textContent = meta.name;
+        if (detSeats) detSeats.textContent = meta.seats;
+        if (detPrice) detPrice.textContent = meta.price;
+        if (detEditionBadge) detEditionBadge.textContent = meta.pill;
 
-        detectedProfileCard.classList.remove('hidden');
-        unregisteredMachineCard.classList.add('hidden');
+        if (detectedProfileCard) detectedProfileCard.classList.remove('hidden');
+        if (unregisteredMachineCard) unregisteredMachineCard.classList.add('hidden');
       } else {
         detectedUserProfile = null;
-        detectedProfileCard.classList.add('hidden');
-        unregisteredMachineCard.classList.remove('hidden');
+        if (detectedProfileCard) detectedProfileCard.classList.add('hidden');
+        if (unregisteredMachineCard) unregisteredMachineCard.classList.remove('hidden');
       }
     } catch (e) {
       console.warn('Machine profile lookup note:', e);
+    } finally {
+      if (lookupMachineBtn) {
+        lookupMachineBtn.textContent = '🔍 Find Profile';
+        lookupMachineBtn.disabled = false;
+      }
     }
   }
 
+  let lookupTimer = null;
   if (machineIdInput) {
+    machineIdInput.addEventListener('input', () => {
+      clearTimeout(lookupTimer);
+      const val = machineIdInput.value.trim();
+      if (val.length >= 6) {
+        lookupTimer = setTimeout(() => lookupMachineProfile(val), 350);
+      }
+    });
     machineIdInput.addEventListener('change', () => lookupMachineProfile(machineIdInput.value));
     machineIdInput.addEventListener('blur', () => lookupMachineProfile(machineIdInput.value));
   }
@@ -312,7 +356,10 @@
     const ownerEmail = detectedUserProfile?.email || `${machineId.toLowerCase()}@practice.internal`;
     const frn = detectedUserProfile?.frn || null;
 
-    const edition = document.querySelector('input[name="edition"]:checked').value;
+    // Auto-detect edition from client setup profile in Supabase, or fallback if unregistered
+    const edition = detectedUserProfile?.practice_edition 
+      || (fallbackEdition ? fallbackEdition.value : 'solo');
+
     const validityDays = parseInt(document.getElementById('validityDays').value, 10);
     const paymentMethod = document.getElementById('paymentMethod').value;
 

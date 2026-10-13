@@ -238,6 +238,14 @@ input:focus, select:focus {
   padding: 0.85rem 1rem;
   animation: fadeIn 0.25s ease-in-out;
 }
+.detected-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.2);
+}
 .detected-badge {
   display: inline-flex;
   align-items: center;
@@ -247,7 +255,18 @@ input:focus, select:focus {
   color: #34D399;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 0.5rem;
+}
+.edition-pill {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid #38BDF8;
+  color: #38BDF8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .detected-grid {
   display: grid;
@@ -266,6 +285,10 @@ input:focus, select:focus {
 .highlight-text {
   color: #38BDF8;
   font-weight: 700;
+}
+.price-highlight {
+  color: #10B981;
+  font-weight: 800;
 }
 .not-found-card {
   margin-top: 0.85rem;
